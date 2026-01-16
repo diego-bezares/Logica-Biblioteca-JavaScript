@@ -27,6 +27,17 @@ public class Biblioteca_Bezares_218606334 {
         this.limiteDeudaMax = limiteDeuda;
     }
 
+    public List<Libro_Bezares_218606334> getLibros() { return libros; }
+    public List<Usuario_Bezares_218606334> getUsuarios() { return usuarios; }
+    public List<Prestamo_Bezares_218606334> getPrestamos() { return prestamos; }
+
+    public int getMaxLibrosPorUsuario() { return maxLibrosPorUsuario; }
+    public int getDiasMaxPrestamo() { return diasMaxPrestamo; }
+    public int getLimiteDeudaMax() { return limiteDeudaMax; }
+    public LocalDate getFechaActual() { return fechaActual; }
+    public void registrarNuevoPrestamo(Prestamo_Bezares_218606334 p) {
+        this.prestamos.add(p);
+    }
 
     // RF07: Agregar Libro
     public boolean agregarLibro(Libro_Bezares_218606334 libro){
@@ -53,42 +64,10 @@ public class Biblioteca_Bezares_218606334 {
     }
 
     // RF18: Realizar préstamo
-    public boolean realizarPrestamo(int idUsuario, int idLibro, int diasSolicitados){
-        Usuario_Bezares_218606334 u = buscarUsuarioPorId(idUsuario);
-
-        Libro_Bezares_218606334 l = null;
-        for(Libro_Bezares_218606334 libro : libros){
-            if(libro.getId() == idLibro) {
-                l = libro;
-                break;
-            }
-        }
-
-        // Validaciones
-        if(u == null || l == null) return false; // No existe el usuario o el libro
-        if(!l.estaDisponible()) return false; // El libro no está disponible
-        if(!u.puedePedirPrestamo()) return false; // Usuario suspendido
-        if(diasSolicitados > diasMaxPrestamo) return false; // Días solicitados exceden el máximo
-
-        // Verificar cantidad de préstamos activos
-        long prestamosActivos = u.getPrestamos().stream().filter(p -> p.getEstado().equals("ACTIVO")).count();
-        if(prestamosActivos >= maxLibrosPorUsuario) return false;
-
-        // Verificar deuda
-        if(u.getDeuda() > limiteDeudaMax) return false;
-
-        // Ejecución del préstamo
-        l.setDisponible(false);
-        Prestamo_Bezares_218606334 nuevoPrestamo = new Prestamo_Bezares_218606334(
-                u.getId(),
-                l.getId(),
-                this.fechaActual,
-                diasSolicitados
-        );
-        this.prestamos.add(nuevoPrestamo);
-        u.agregarPrestamo(nuevoPrestamo);
-
-        return true;
+    public boolean realizarPrestamo(int idUsuario, int idLibro, int diasSolicitados) {
+        // Instanciamos la estrategia
+        IOperacionPrestamo_Bezares_218606334 operacion = new PrestamoNormal_Bezares_218606334();
+        return operacion.ejecutarPrestamo(this, idUsuario, idLibro, diasSolicitados);
     }
 
     // RF19: Devolver libro
@@ -125,6 +104,38 @@ public class Biblioteca_Bezares_218606334 {
         }
     }
 
+    // RF23: Pagar Deuda
+    public String pagarDeuda(int idUsuario, int monto) {
+        Usuario_Bezares_218606334 usuario = buscarUsuarioPorId(idUsuario);
+        if (usuario == null) return "Usuario no encontrado.";
+
+        // Aplicar pago
+        usuario.disminuirDeuda(monto);
+
+        // Verificar reactivación
+        if (usuario.getDeuda() == 0) {
+            boolean tieneAtrasos = false;
+            for (Prestamo_Bezares_218606334 p : prestamos) {
+                // Buscamos prestamos activos de este usuario que tengan retraso hoy
+                if (p.getIdUsuario() == idUsuario && p.getEstado().equals("ACTIVO")) {
+                    if (p.calcularDiasRetraso(this.fechaActual) > 0) {
+                        tieneAtrasos = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!tieneAtrasos) {
+                usuario.activar(); // Reactivar usuario
+                return "Pago exitoso. Deuda saldada y usuario REACTIVADO.";
+            } else {
+                return "Pago exitoso. Deuda saldada, pero usuario sigue SUSPENDIDO por libros atrasados sin devolver.";
+            }
+        }
+
+        return "Pago parcial realizado. Nueva deuda: $" + usuario.getDeuda();
+    }
+
     // RF26: Procesar día
     public void procesarDia() {
         this.fechaActual = this.fechaActual.plusDays(1);
@@ -141,8 +152,4 @@ public class Biblioteca_Bezares_218606334 {
         }
     }
 
-    // Getter para fecha actual
-    public LocalDate getFechaActual() {
-        return fechaActual;
-    }
 }

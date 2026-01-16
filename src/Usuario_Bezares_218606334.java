@@ -49,4 +49,9 @@ public class Usuario_Bezares_218606334 {
     public void agregarPrestamo(Prestamo_Bezares_218606334 prestamo) {
         this.prestamos.add(prestamo);
     }
+
+    public void disminuirDeuda(int monto) {
+        this.deuda -= monto;
+        if (this.deuda < 0) this.deuda = 0; // Evitar deuda negativa
+    }
 }
