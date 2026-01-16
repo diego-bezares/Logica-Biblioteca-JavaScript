@@ -34,6 +34,7 @@ public class Biblioteca_Bezares_218606334 {
     public int getMaxLibrosPorUsuario() { return maxLibrosPorUsuario; }
     public int getDiasMaxPrestamo() { return diasMaxPrestamo; }
     public int getLimiteDeudaMax() { return limiteDeudaMax; }
+    public int getTasaMultaDiaria() { return tasaMultaDiaria; }
     public LocalDate getFechaActual() { return fechaActual; }
     public void registrarNuevoPrestamo(Prestamo_Bezares_218606334 p) {
         this.prestamos.add(p);
@@ -71,37 +72,48 @@ public class Biblioteca_Bezares_218606334 {
     }
 
     // RF19: Devolver libro
-    public void devolverLibro(int idLibro){
-        // Se busca el préstamo activo asociado al libro
-        for(Prestamo_Bezares_218606334 p : prestamos){
-            if(p.getIdLibro() == idLibro && p.getEstado().equals("ACTIVO")){
-                long diasRetraso = p.calcularDiasRetraso(this.fechaActual);
-                int multa = (int) (diasRetraso * tasaMultaDiaria);
+    public void devolverLibro(int idLibro) {
+        IOperacionDevolucion_Bezares_218606334 operacion = new DevolucionNormal_Bezares_218606334();
+        operacion.realizarDevolucion(this, idLibro);
+    }
 
-                // Actualizar usuario
-                Usuario_Bezares_218606334 usuario = buscarUsuarioPorId(p.getIdUsuario());
-                if(usuario != null){
-                    usuario.agregarDeuda(multa);
-                    // RF20: Suspender automáticamente si excede el límite de deuda
-                    if(usuario.getDeuda() > limiteDeudaMax){
-                        usuario.suspender();
-                    }
-                }
-
-                // Actualizar préstamo
-                p.finalizarPrestamo(this.fechaActual);
-
-                // Actualizar libro
-                for(Libro_Bezares_218606334 l : libros){
-                    if(l.getId() == idLibro) {
-                        l.setDisponible(true);
-                        break;
-                    }
-                }
-
-                return;
+    // RF22: Renovar préstamo
+    public String renovarPrestamo(int idPrestamo, int diasExtra) {
+        // Buscar el préstamo
+        Prestamo_Bezares_218606334 prestamo = null;
+        for (Prestamo_Bezares_218606334 p : prestamos) {
+            if (p.getId() == idPrestamo) {
+                prestamo = p;
+                break;
             }
         }
+
+        // Validaciones
+        if (prestamo == null) return "Préstamo no encontrado.";
+        if (!prestamo.getEstado().equals("ACTIVO")) return "El préstamo no está activo.";
+
+        Usuario_Bezares_218606334 usuario = buscarUsuarioPorId(prestamo.getIdUsuario());
+        if (usuario == null) return "Usuario no existe.";
+
+        // Usuario no suspendido
+        if (!usuario.puedePedirPrestamo()) return "Usuario suspendido, no puede renovar.";
+
+        // No hay retraso actual
+        if (prestamo.calcularDiasRetraso(this.fechaActual) > 0) return "El préstamo ya tiene retraso. No se puede renovar.";
+
+        // Días totales no exceden máximo
+        long diasTotales = java.time.temporal.ChronoUnit.DAYS.between(
+                prestamo.getFechaInicio(),
+                prestamo.getFechaVencimiento().plusDays(diasExtra)
+        );
+
+        if (diasTotales > this.diasMaxPrestamo) {
+            return "Renovación rechazada: Excede el tiempo máximo permitido de préstamo (" + this.diasMaxPrestamo + " días totales).";
+        }
+
+        // Ejecutar renovación
+        prestamo.extenderPlazo(diasExtra);
+        return "Renovación exitosa. Nuevo vencimiento: " + prestamo.getFechaVencimiento();
     }
 
     // RF23: Pagar Deuda
@@ -134,6 +146,43 @@ public class Biblioteca_Bezares_218606334 {
         }
 
         return "Pago parcial realizado. Nueva deuda: $" + usuario.getDeuda();
+    }
+
+    // RF24: Historial préstamos Usuario (Reporte String)
+    public String generarReporteUsuario(int idUsuario) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("--- Historial Usuario ID ").append(idUsuario).append(" ---\n");
+
+        boolean tieneDatos = false;
+        for (Prestamo_Bezares_218606334 p : prestamos) {
+            if (p.getIdUsuario() == idUsuario) {
+                sb.append("ID Préstamo: ").append(p.getId())
+                        .append(" | ID Libro: ").append(p.getIdLibro())
+                        .append(" | Fecha: ").append(p.getFechaInicio())
+                        .append(" | Vence: ").append(p.getFechaVencimiento())
+                        .append(" | Estado: ").append(p.getEstado()).append("\n");
+                tieneDatos = true;
+            }
+        }
+
+        if (!tieneDatos) return "El usuario no tiene historial de préstamos.";
+        return sb.toString();
+    }
+
+    // RF25: Historial sistema
+    public String generarReporteSistema() {
+        if (prestamos.isEmpty()) return "No hay préstamos registrados en el sistema.";
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("--- REPORTE GENERAL DEL SISTEMA ---\n");
+        for (Prestamo_Bezares_218606334 p : prestamos) {
+            sb.append("ID: ").append(p.getId())
+                    .append(" | User: ").append(p.getIdUsuario())
+                    .append(" | Libro: ").append(p.getIdLibro())
+                    .append(" | Inicio: ").append(p.getFechaInicio())
+                    .append(" | Estado: ").append(p.getEstado()).append("\n");
+        }
+        return sb.toString();
     }
 
     // RF26: Procesar día

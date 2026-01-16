@@ -38,6 +38,9 @@ public class Prestamo_Bezares_218606334 {
         this.fechaDevolucionReal = fechaDevolucion;
         this.estado = "FINALIZADO";
     }
+    public void extenderPlazo(int diasExtra) {
+        this.fechaVencimiento = this.fechaVencimiento.plusDays(diasExtra);
+    }
 
     // RF16: Calcular días de retraso
     public long calcularDiasRetraso(LocalDate fechaActual) {
